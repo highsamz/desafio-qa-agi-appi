@@ -15,16 +15,16 @@ foi tomada, não apenas *o que* foi usado.
 **Trade-offs:**
 
 - **Playwright em Java** cobre chamadas de API via `APIRequestContext`, mas:
-    - Não traz *runner* próprio em Java (diferente do TS) ainda dependeria de
-      JUnit/TestNG por baixo.
-    - Seus diferenciais reais (auto-wait, browser, tracing) não se aplicam a teste
-      de API pura, paga-se a complexidade sem usar o benefício.
-    - Exigiria reconstruir à mão captura de response, parsing de body e validação
-      de schema.
+  - Não traz *runner* próprio em Java (diferente do TS), ainda dependeria de
+    JUnit/TestNG por baixo.
+  - Seus diferenciais reais (auto-wait, browser, tracing) não se aplicam a teste
+    de API pura paga-se a complexidade sem usar o benefício.
+  - Exigiria reconstruir à mão captura de response, parsing de body e validação
+    de schema.
 - **Rest Assured** é o padrão de mercado para teste de API em Java:
-    - DSL fluente (`given/when/then`) feita para o caso de uso.
-    - Validação de JSON (JsonPath) e de contrato (`matchesJsonSchema`) nativas.
-    - Reconhecimento imediato pelo avaliador; menos código de infraestrutura.
+  - DSL fluente (`given/when/then`) feita para o caso de uso.
+  - Validação de JSON (JsonPath) e de contrato (`matchesJsonSchema`) nativas.
+  - Reconhecimento imediato pelo avaliador; menos código de infraestrutura.
 
 **Conclusão:** o que dá identidade à automação é a **arquitetura em camadas**, não
 o transporte. Rest Assured entrega o mesmo shape com menos encanamento.
@@ -68,11 +68,11 @@ parametrização (`@ParameterizedTest`) ser suficiente para os cenários da Dog 
 - **Allure** entrega relatório rico "de graça", porém padronizado e menos
   personalizável.
 - **Relatório próprio** exige mais código, mas:
-    - Controle total sobre visual e conteúdo.
-    - Arquitetura de *writer* plugável (`ExecutionReportWriter`) — fácil adicionar
-      novos formatos.
-    - Coleta confiável via *Extension API* do JUnit (`TestWatcher`), não parsing
-      de log.
+  - Controle total sobre visual e conteúdo.
+  - Arquitetura de *writer* plugável (`ExecutionReportWriter`), fácil adicionar
+    novos formatos.
+  - Coleta confiável via *Extension API* do JUnit (`TestWatcher`), não parsing
+    de log.
 - O **JUnit XML / Surefire** segue rodando junto: é o formato que o CI entende
   nativamente. O relatório próprio é a camada de apresentação por cima —
   redundância barata e segura.
@@ -123,3 +123,75 @@ OpenPDF é de baixo custo caso a licença se torne uma restrição.
 **Trade-off:** *records*, *switch expressions* e recursos modernos usados no
 relatório rodam sem workaround; LTS garante disponibilidade na máquina do
 avaliador.
+
+---
+
+## 8. Modelagem dos DTOs: um por endpoint (vs. envelope genérico)
+
+**Decisão:** um DTO por endpoint (`BreedListResponse`, `BreedImagesResponse`,
+`RandomImageResponse`).
+
+**Trade-off:**
+
+- **Envelope genérico** `DogApiResponse<T>` seria mais DRY, mas generics + Jackson
+  exigem `TypeReference` e adicionam cerimônia que a API não pede.
+- **Um por endpoint** é mais explícito e type-safe: cada validator casa com um DTO,
+  e o avaliador entende o contrato na hora.
+
+**Detalhe de erro:** no erro, `message` é sempre uma *string*. Isso só encaixa no
+`RandomImageResponse` (cujo `message` já é `String`). Para `BreedImagesResponse`
+(`List`) e `BreedListResponse` (`Map`), o corpo de erro **não** desserializa no DTO
+de sucesso — por isso os cenários negativos validam no `Response` cru (status HTTP +
+JsonPath `status`/`message`/`code`), não via DTO.
+
+---
+
+## 9. Camada flow retorna `Response` cru (vs. DTO)
+
+**Decisão:** os métodos de flow devolvem a `Response` do Rest Assured; a
+desserialização para DTO é feita via `response.as(...)` na camada de cenário.
+
+**Trade-off:**
+
+- Retornar **DTO direto** esconderia status HTTP, content-type e o corpo de erro, que é
+  justamente o que os validators de contrato/negativo precisam.
+- Retornar **`Response`** preserva a verdade de transporte e evita chamada HTTP
+  duplicada (`.as()` opera sobre a resposta já obtida). O valor do flow passa a ser
+  a **orquestração** (ex.: `imagesForFirstBreed` encadeia lista → escolha → imagens),
+  não o encapsulamento do transporte.
+
+---
+
+## 10. JSON Schema em draft-04
+
+**Decisão:** schemas em draft-04.
+
+**Trade-off:** o validador padrão do Rest Assured (`json-schema-validator`) é baseado
+na lib da fge, com suporte pleno a draft-04. Draft-07 traria recursos como `format`
+mas com risco de não ser validado. Regras que o schema não cobre bem (formato de URL)
+ficam nos validators em código, não no schema.
+
+---
+
+## 11. Validação de URL de imagem e cenários instáveis
+
+**Decisão:** validar formato (https + host `images.dog.ceo` + extensão) sempre, e
+acessibilidade real (HEAD 200) num grupo isolado por tag `@external`.
+
+**Trade-off:** o HEAD testa o CDN, não a API, adiciona dependência de rede e
+possível flakiness. Isolar por tag mantém a suíte core determinística e permite rodar
+o grupo externo à parte. Cenários potencialmente instáveis (aleatoriedade, contagem
+por sub-raça) também recebem tags para não contaminar o core.
+
+---
+
+## 12. Auto-registro da extension de relatório (vs. `@ExtendWith`)
+
+**Decisão:** registrar a extension via `META-INF/services` +
+`junit.jupiter.extensions.autodetection.enabled=true`.
+
+**Trade-off:**
+
+- **`@ExtendWith` na classe base** é mais explícito e fácil de justificar.
+- **Auto-detecção** mantém os cenários e a base limpos (nenhuma anotação de report),
+  ao custo de um comportamento menos óbvio, documentado no README para compensar.
