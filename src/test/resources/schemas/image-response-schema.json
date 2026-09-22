@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "required": ["message", "status"],
+  "properties": {
+    "message": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["success"]
+    }
+  }
+}
