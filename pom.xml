@@ -12,10 +12,6 @@
     <packaging>jar</packaging>
 
     <name>dog-api-test-automation</name>
-    <description>
-        Automação de testes de API para a Dog API (https://dog.ceo/dog-api/documentation).
-        Arquitetura em camadas: client (Service Object) → flow → validator → cenários.
-    </description>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
