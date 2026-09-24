@@ -8,17 +8,17 @@ import java.util.Map;
 import java.util.Objects;
 
 public record TestExecutionRecord(
-    String suite,
-    String className,
-    String parentClassName,
-    String displayName,
-    String methodName,
-    ExecutionStatus status,
-    Instant startedAt,
-    Duration duration,
-    String errorMessage,
-    String stackTraceExcerpt,
-    Map<String, String> extras
+        String suite,
+        String className,
+        String parentClassName,
+        String displayName,
+        String methodName,
+        ExecutionStatus status,
+        Instant startedAt,
+        Duration duration,
+        String errorMessage,
+        String stackTraceExcerpt,
+        Map<String, String> extras
 ) {
 
   public TestExecutionRecord {
@@ -29,8 +29,8 @@ public record TestExecutionRecord(
     startedAt = Objects.requireNonNullElseGet(startedAt, Instant::now);
     duration = Objects.requireNonNullElse(duration, Duration.ZERO);
     extras = extras == null || extras.isEmpty()
-        ? Map.of()
-        : Collections.unmodifiableMap(new LinkedHashMap<>(extras));
+            ? Map.of()
+            : Collections.unmodifiableMap(new LinkedHashMap<>(extras));
   }
 
   public String context() {
@@ -43,5 +43,16 @@ public record TestExecutionRecord(
 
   public boolean hasError() {
     return errorMessage != null && !errorMessage.isBlank();
+  }
+
+  public String errorHeadline() {
+    if (!hasError()) {
+      return null;
+    }
+    return errorMessage.lines().findFirst().orElse(errorMessage);
+  }
+
+  public boolean hasMultilineError() {
+    return hasError() && errorMessage.lines().count() > 1;
   }
 }

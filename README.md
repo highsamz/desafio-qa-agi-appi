@@ -21,6 +21,7 @@ cenários — caminho feliz, negativos e casos de borda.
 - [Integração contínua (CI)](#-integração-contínua-ci)
 - [Decisões técnicas](#-decisões-técnicas)
 - [Achados de QA](#-achados-de-qa)
+- [Débito técnico declarado](#-débito-técnico-declarado)
 - [Autor](#-autor)
 
 ---
@@ -112,8 +113,7 @@ dog-api-test-automation/
 - **Maven 3.9+** (`mvn -version`)
 - Acesso à internet (os testes consomem a Dog API pública)
 
-> Não é necessário instalar o Maven separadamente se preferir usar um wrapper próprio;
-> o projeto roda com qualquer Maven 3.9+ em Linux, Windows ou macOS.
+O projeto roda com qualquer Maven 3.9+ em Linux, Windows ou macOS.
 
 ---
 
@@ -126,6 +126,9 @@ git clone https://github.com/highsamz/desafio-qa-agi-appi.git
 cd desafio-qa-agi-appi
 mvn test
 ```
+
+Resultado esperado: **18 cenários** — 17 executados e 1 desabilitado
+(ver [Achados de QA](#-achados-de-qa)).
 
 ### Execução seletiva por tag
 
@@ -166,25 +169,43 @@ mvn test -Ddogapi.baseUri=https://minha-base-alternativa
 
 ## 🔗 Endpoints e cenários
 
-### `GET /breeds/list/all`
-- Contrato: 200, JSON, `status: success`, aderência ao JSON Schema
-- Conteúdo: lista íntegra e não vazia; raça conhecida com sub-raças esperadas; raça
-  sem sub-raça retornando lista vazia
-- Negativos: rota inválida (segmento extra) → 404 fora do envelope JSON
+18 cenários no total. A tabela abaixo reflete exatamente o que existe em
+`src/test/java/.../tests/`.
 
-### `GET /breed/{breed}/images`
-- Caminho feliz: raça válida retorna lista não vazia; aderência ao Schema; URLs contêm
-  o nome da raça; raça sem sub-raça também retorna imagens; sub-raça
-  (`/breed/{breed}/{subBreed}/images`); raça principal combinando várias sub-raças
-- Negativos: raça inexistente → 404 com `status: error` e `message` contendo
-  *"not found"*; corpo de erro aderente ao Schema de erro; sub-raça inexistente com
-  mensagem distinta da raça principal; rota inválida (barra final) rompendo o envelope
+### `GET /breeds/list/all` — `BreedsListTests` (5)
 
-### `GET /breeds/image/random`
-- Contrato: 200, JSON, `status: success`, aderência ao Schema
-- Conteúdo: `message` é uma URL de imagem válida
-- Aleatoriedade: chamadas repetidas retornam URLs majoritariamente distintas
-- Acessibilidade (`@external`): a imagem retornada responde a um HEAD com 200
+| Grupo | Cenário |
+|---|---|
+| Contrato | Retorna 200, JSON e `status: success` |
+| Contrato | Corpo adere ao JSON Schema |
+| Conteúdo | Lista de raças íntegra e não vazia (todas as chaves e sub-raças validadas) |
+| Conteúdo | Raça conhecida (`hound`) traz as sub-raças esperadas (`afghan`, `basset`) |
+| Conteúdo | Raça sem sub-raça (`affenpinscher`) retorna lista vazia |
+
+### `GET /breed/{breed}/images` — `BreedImagesTests` (8)
+
+| Grupo | Cenário |
+|---|---|
+| Caminho feliz | Raça válida retorna lista não vazia de imagens |
+| Caminho feliz | Corpo adere ao JSON Schema |
+| Caminho feliz | Todas as URLs contêm o nome da raça |
+| Caminho feliz | Raça sem sub-raça também retorna imagens |
+| Caminho feliz | Sub-raça retorna imagens (`/breed/{breed}/{subBreed}/images`) |
+| Caminho feliz | Raça principal combina imagens de múltiplas sub-raças — `@unstable` |
+| Negativo | Raça inexistente (`notabreed`) → 404, `status: error`, `message` contendo *"not found"* |
+| Negativo | Case do nome da raça — **`@Disabled`**, ver [Achados de QA](#-achados-de-qa) |
+
+### `GET /breeds/image/random` — `RandomImageTests` (5)
+
+| Grupo | Cenário |
+|---|---|
+| Contrato | Retorna 200, JSON e `status: success` |
+| Contrato | Corpo adere ao JSON Schema |
+| Conteúdo | `message` é uma URL de imagem válida (https + host + extensão) |
+| Aleatoriedade | 5 chamadas retornam ao menos 2 URLs distintas — `@unstable` |
+| Acessibilidade | A imagem retornada responde a um HEAD com 200 — `@external` |
+
+O recorte determinístico (`-DexcludedGroups=external,unstable`) executa **14 cenários**.
 
 ---
 
@@ -200,7 +221,9 @@ Ao final de cada execução, dois relatórios são gerados automaticamente em
 | `DOG_API_EXECUTION_REPORT_<timestamp>.pdf` | Cópia versionada por data/hora |
 
 O relatório traz total, aprovados/falhados/ignorados, taxa de sucesso, tempo total e,
-para cada falha, a mensagem de erro e um trecho de stack trace filtrado.
+para cada falha: suíte, classe, método, duração, a **mensagem de erro na íntegra**
+(inclusive multi-linha, como nas falhas de JSON Schema) e um trecho de stack trace
+filtrado, apontando a linha exata do cenário.
 
 A coleta é feita via `TestWatcher` (JUnit 5) e a geração dispara no encerramento da
 execução — sem parsing de log.
@@ -210,26 +233,31 @@ execução — sem parsing de log.
 ## 🔄 Integração contínua (CI)
 
 O workflow em `.github/workflows/ci.yml` executa em **push**, **pull request** e
-**manualmente** (`workflow_dispatch`):
-
-O pipeline é dividido em dois jobs:
+**manualmente** (`workflow_dispatch`), dividido em dois jobs:
 
 | Job | Escopo | Bloqueante |
 |---|---|---|
 | `core` | `mvn -B test -DexcludedGroups=external,unstable` | ✅ Sim |
 | `full` | `mvn -B test` (suíte completa) | ❌ Não (`continue-on-error`) |
 
-O job **core** roda apenas os testes determinísticos: uma indisponibilidade da API
-pública ou uma variação de aleatoriedade não derruba o pipeline. O job **full** executa
-tudo em caráter informativo — falhas ali sinalizam instabilidade externa, não regressão
-de código.
+O job **core** roda apenas os testes determinísticos, isolando as fontes de
+instabilidade *internas* à suíte: variação de aleatoriedade (`unstable`) e dependência
+do CDN de imagens (`external`). O job **full** executa tudo em caráter informativo:
+falhas ali indicam instabilidade nesses pontos, não regressão de código.
+
+**Limite conhecido:** essa separação não torna o pipeline tolerante a uma
+indisponibilidade da Dog API. Todos os testes, inclusive os do `core`, consomem a API
+pública; se ela estiver fora, o `core` falha. O que o desenho entrega é falha *rápida*
+e diagnóstico claro (ver timeouts abaixo), não tolerância a outage. Tolerar isso exigiria
+retry com backoff ou um mock/contract test, fora do escopo deste desafio.
 
 Ambos publicam os relatórios (MD + PDF) como **artifact**, inclusive quando há falhas
 (`if: always()`), disponíveis na aba **Actions** → execução → *Artifacts*
 (`dog-api-reports-core` / `dog-api-reports-full`).
 
-As requisições têm **timeout** configurado (5s de conexão, 10s de resposta), evitando
-que o pipeline fique pendurado se a API não responder.
+As requisições têm **timeout** configurado (5s de conexão, 10s de resposta): se a API
+não responder, a execução falha rapidamente com erro explícito em vez de ficar pendurada
+até o limite do runner.
 
 ---
 
@@ -244,17 +272,66 @@ cenários.
 
 ## 🔎 Achados de QA
 
-**1. Case do nome da raça.** A documentação sugere que o nome da raça seria
-case-sensitive, mas a Dog API **normaliza o case na entrada**: `Hound` retorna 200 com
-exatamente o mesmo conjunto de imagens de `hound`. Coberto por teste ativo que compara
-os dois conjuntos.
+Três divergências entre documentação e comportamento observado, verificadas
+manualmente contra a API em produção.
 
-**2. Contrato de erro não uniforme.** Em rotas não mapeadas (ex.: `/breed/hound/images/`
-com barra final, ou `/breeds/list/all/extra`), a API responde **fora do próprio
-envelope** — sem `Content-Type: application/json` e sem os campos `status`/`message`
-presentes nos demais erros. Coberto por testes que documentam o comportamento.
+**1. Case do nome da raça — divergência confirmada.**
+A documentação sugere que o nome da raça seria case-sensitive, mas a Dog API
+**normaliza o case na entrada**: `GET /breed/Hound/images` retorna **200** com o mesmo
+conjunto de imagens de `hound`, não 404.
 
-Ambos estão detalhados em [COMMENTS.md](./COMMENTS.md).
+*Status de cobertura:* o cenário `breedNameIsCaseSensitive` está **`@Disabled`**, com a
+justificativa registrada na própria anotação. Ele foi mantido no código como
+documentação executável do achado, em vez de ser removido silenciosamente. Reescrevê-lo
+para asserir o comportamento *real* (200 + mesmo conjunto de `hound`) é item aberto —
+ver [Débito técnico](#-débito-técnico-declarado).
+
+**2. Contrato de erro não uniforme em rotas não mapeadas.**
+O envelope de erro (`status`/`message`/`code` em JSON) só é respeitado nas rotas
+mapeadas. Em rotas inválidas a API responde 404 **fora do próprio contrato** — sem
+`Content-Type` e sem os campos do envelope:
+
+| Rota | HTTP | `Content-Type` | Envelope |
+|---|---|---|---|
+| `/breed/hound/images/` (barra final) | 404 | *(ausente)* | ❌ |
+| `/breeds/list/all/extra` | 404 | *(ausente)* | ❌ |
+| `/breed/hound/notasub/images` | 404 | `application/json` | ✅ (`sub breed does not exist`) |
+
+Por que importa: um cliente que trate todo erro esperando `status`/`message` quebra
+nessas rotas.
+
+*Status de cobertura:* **achado documentado, ainda não automatizado.** A infraestrutura
+está pronta (`DogApiClient.getBreedImagesTrailingSlash`,
+`getAllBreedsWithExtraSegment`, `ResponseValidator.assertNotJsonEnvelope`), os cenários
+que a consomem são item aberto — ver [Débito técnico](#-débito-técnico-declarado).
+
+**3. Mensagem de erro distingue raça de sub-raça.**
+`/breed/notabreed/images` responde `Breed not found (main breed does not exist)`,
+enquanto `/breed/hound/notasub/images` responde
+`Breed not found (sub breed does not exist)`. Ponto positivo da API: o erro é
+diagnosticável, não genérico.
+
+*Status de cobertura:* o caso de raça principal é coberto por teste ativo; o de
+sub-raça inexistente está documentado, não automatizado.
+
+Os três estão detalhados em [COMMENTS.md](./COMMENTS.md) (itens 15, 16 e 19).
+
+---
+
+## 📌 Débito técnico declarado
+
+Registro explícito do que **não** está coberto, para que o escopo real da suíte não
+depender de leitura do código:
+
+| Item | Situação |
+|---|---|
+| Cenários de rota não mapeada (barra final, segmento extra) | Client, flow e validator implementados; **testes pendentes** |
+| `schemas/error-schema.json` | Criado, **nenhum cenário o exercita** — o corpo de erro é validado campo a campo em `ResponseValidator.assertError`, não por schema |
+| Sub-raça inexistente com mensagem distinta | Achado confirmado manualmente, **teste pendente** |
+| `breedNameIsCaseSensitive` | `@Disabled`; pendente reescrever para asserir o comportamento real |
+| `BreedFlow.imagesForFirstBreed` / `firstBreed` | Helpers de orquestração implementados, ainda não usados por cenário |
+| Resiliência a outage da API | Não implementada por decisão de escopo (ver CI, "Limite conhecido") |
+| `reportInfo(...)` em testes que passam | Coletado, mas o writer só renderiza `extras` no bloco de falhas |
 
 ---
 

@@ -47,7 +47,7 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
 
   @Override
   public void write(List<TestExecutionRecord> records, ExecutionSummary summary)
-      throws IOException {
+          throws IOException {
     ReportPaths.ensureDirectories();
     Path file = ReportPaths.pdfFile();
 
@@ -55,7 +55,7 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
     PdfFont bold = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD);
 
     try (PdfDocument pdf = new PdfDocument(new PdfWriter(file.toFile()));
-        Document document = new Document(pdf, PageSize.A4.rotate())) {
+         Document document = new Document(pdf, PageSize.A4.rotate())) {
 
       document.setMargins(24, 24, 24, 24);
       document.setFont(regular).setFontSize(BODY_SIZE);
@@ -67,32 +67,32 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
     }
 
     Files.copy(file, ReportPaths.timestampedPdfFile(summary.finishedAt()),
-        StandardCopyOption.REPLACE_EXISTING);
+            StandardCopyOption.REPLACE_EXISTING);
 
     System.out.println("📄 Relatório Dog API (PDF): " + file.toAbsolutePath());
   }
 
   private void addHeader(Document document, ExecutionSummary summary, PdfFont bold,
-      PdfFont regular) {
+                         PdfFont regular) {
     document.add(new Paragraph("Dog API - Relatorio de Execucao")
-        .setFont(bold)
-        .setFontSize(TITLE_SIZE)
-        .setFontColor(HEADER_BACKGROUND));
+            .setFont(bold)
+            .setFontSize(TITLE_SIZE)
+            .setFontColor(HEADER_BACKGROUND));
 
     document.add(new Paragraph("Gerado em " + ReportPaths.format(summary.finishedAt()))
-        .setFont(regular)
-        .setFontSize(BODY_SIZE)
-        .setFontColor(ColorConstants.DARK_GRAY)
-        .setMarginBottom(12));
+            .setFont(regular)
+            .setFontSize(BODY_SIZE)
+            .setFontColor(ColorConstants.DARK_GRAY)
+            .setMarginBottom(12));
   }
 
   private void addSummaryTable(Document document, ExecutionSummary summary, PdfFont bold) {
     Table table = new Table(UnitValue.createPercentArray(new float[]{1, 1, 1, 1, 1, 1, 1}))
-        .useAllAvailableWidth()
-        .setMarginBottom(14);
+            .useAllAvailableWidth()
+            .setMarginBottom(14);
 
     addHeaderCells(table, bold, "Total", "Passaram", "Falharam", "Abortados", "Ignorados",
-        "Sucesso", "Tempo total");
+            "Sucesso", "Tempo total");
 
     table.addCell(valueCell(String.valueOf(summary.total()), ColorConstants.BLACK, bold));
     table.addCell(valueCell(String.valueOf(summary.passed()), SUCCESS, bold));
@@ -100,7 +100,7 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
     table.addCell(valueCell(String.valueOf(summary.aborted()), WARNING, bold));
     table.addCell(valueCell(String.valueOf(summary.skipped()), ColorConstants.DARK_GRAY, bold));
     table.addCell(valueCell(summary.formattedSuccessRate(),
-        summary.hasFailures() ? FAILURE : SUCCESS, bold));
+            summary.hasFailures() ? FAILURE : SUCCESS, bold));
     table.addCell(valueCell(summary.formattedTotalDuration(), ColorConstants.BLACK, bold));
 
     document.add(table);
@@ -108,8 +108,8 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
 
   private void addFailures(Document document, List<TestExecutionRecord> records, PdfFont bold) {
     List<TestExecutionRecord> failures = records.stream()
-        .filter(r -> r.status().isFailure())
-        .toList();
+            .filter(r -> r.status().isFailure())
+            .toList();
 
     if (failures.isEmpty()) {
       document.add(sectionTitle("Todos os testes passaram", bold, SUCCESS));
@@ -119,8 +119,8 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
     document.add(sectionTitle("Falhas (" + failures.size() + ")", bold, FAILURE));
 
     Table table = new Table(UnitValue.createPercentArray(new float[]{2, 4, 3, 1, 6}))
-        .useAllAvailableWidth()
-        .setMarginBottom(14);
+            .useAllAvailableWidth()
+            .setMarginBottom(14);
 
     addHeaderCells(table, bold, "Suite", "Teste", "Classe", "Duracao", "Erro");
 
@@ -131,12 +131,38 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
       table.addCell(bodyCell(record.displayName(), background));
       table.addCell(bodyCell(record.context(), background));
       table.addCell(bodyCell(record.formattedDuration(), background));
-      table.addCell(bodyCell(record.hasError() ? record.errorMessage() : "-", background)
-          .setFontColor(FAILURE));
+      table.addCell(bodyCell(record.hasError() ? record.errorHeadline() : "-", background)
+              .setFontColor(FAILURE));
       stripe = !stripe;
     }
 
     document.add(table);
+    addErrorDetails(document, failures, bold);
+  }
+
+  private void addErrorDetails(Document document, List<TestExecutionRecord> failures,
+                               PdfFont bold) {
+    List<TestExecutionRecord> detailed = failures.stream()
+            .filter(TestExecutionRecord::hasMultilineError)
+            .toList();
+
+    if (detailed.isEmpty()) {
+      return;
+    }
+
+    document.add(sectionTitle("Detalhe das falhas", bold, FAILURE));
+    for (TestExecutionRecord record : detailed) {
+      document.add(new Paragraph(sanitize(record.displayName()))
+              .setFont(bold)
+              .setFontSize(BODY_SIZE)
+              .setMarginBottom(2));
+      record.errorMessage().lines().forEach(line ->
+              document.add(new Paragraph(sanitizeLine(line))
+                      .setFontSize(BODY_SIZE)
+                      .setFontColor(FAILURE)
+                      .setMarginBottom(0)));
+      document.add(new Paragraph(" ").setFontSize(4));
+    }
   }
 
   private void addSuiteTables(Document document, List<TestExecutionRecord> records, PdfFont bold) {
@@ -146,14 +172,14 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
     bySuite.forEach((suite, suiteRecords) -> {
       ExecutionSummary suiteSummary = ExecutionSummary.from(suiteRecords);
       String title = String.format("%s - %d/%d (%s)", suite, suiteSummary.passed(),
-          suiteSummary.total(), suiteSummary.formattedSuccessRate());
+              suiteSummary.total(), suiteSummary.formattedSuccessRate());
 
       document.add(sectionTitle(title, bold,
-          suiteSummary.hasFailures() ? FAILURE : HEADER_BACKGROUND));
+              suiteSummary.hasFailures() ? FAILURE : HEADER_BACKGROUND));
 
       Table table = new Table(UnitValue.createPercentArray(new float[]{1.4f, 6, 3.2f, 1, 4.4f}))
-          .useAllAvailableWidth()
-          .setMarginBottom(14);
+              .useAllAvailableWidth()
+              .setMarginBottom(14);
 
       addHeaderCells(table, bold, "Status", "Teste", "Classe", "Duracao", "Erro");
 
@@ -161,11 +187,11 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
       for (TestExecutionRecord record : suiteRecords) {
         Color background = stripe ? ROW_BACKGROUND : ColorConstants.WHITE;
         table.addCell(bodyCell(record.status().label(), background)
-            .setFontColor(statusColor(record.status())));
+                .setFontColor(statusColor(record.status())));
         table.addCell(bodyCell(record.displayName(), background));
         table.addCell(bodyCell(record.context(), background));
         table.addCell(bodyCell(record.formattedDuration(), background));
-        table.addCell(bodyCell(record.hasError() ? record.errorMessage() : "-", background));
+        table.addCell(bodyCell(record.hasError() ? record.errorHeadline() : "-", background));
         stripe = !stripe;
       }
 
@@ -175,38 +201,38 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
 
   private Paragraph sectionTitle(String text, PdfFont bold, Color color) {
     return new Paragraph(sanitize(text))
-        .setFont(bold)
-        .setFontSize(SECTION_SIZE)
-        .setFontColor(color)
-        .setMarginTop(6)
-        .setMarginBottom(6);
+            .setFont(bold)
+            .setFontSize(SECTION_SIZE)
+            .setFontColor(color)
+            .setMarginTop(6)
+            .setMarginBottom(6);
   }
 
   private void addHeaderCells(Table table, PdfFont bold, String... titles) {
     for (String title : titles) {
       table.addHeaderCell(new Cell()
-          .add(new Paragraph(sanitize(title)).setFont(bold).setFontSize(BODY_SIZE))
-          .setBackgroundColor(HEADER_BACKGROUND)
-          .setFontColor(ColorConstants.WHITE)
-          .setTextAlignment(TextAlignment.CENTER)
-          .setPadding(4));
+              .add(new Paragraph(sanitize(title)).setFont(bold).setFontSize(BODY_SIZE))
+              .setBackgroundColor(HEADER_BACKGROUND)
+              .setFontColor(ColorConstants.WHITE)
+              .setTextAlignment(TextAlignment.CENTER)
+              .setPadding(4));
     }
   }
 
   private Cell valueCell(String value, Color color, PdfFont bold) {
     return new Cell()
-        .add(new Paragraph(sanitize(value)).setFont(bold).setFontSize(11))
-        .setFontColor(color)
-        .setTextAlignment(TextAlignment.CENTER)
-        .setPadding(5);
+            .add(new Paragraph(sanitize(value)).setFont(bold).setFontSize(11))
+            .setFontColor(color)
+            .setTextAlignment(TextAlignment.CENTER)
+            .setPadding(5);
   }
 
   private Cell bodyCell(String value, Color background) {
     return new Cell()
-        .add(new Paragraph(sanitize(value)).setFontSize(BODY_SIZE))
-        .setBackgroundColor(background)
-        .setTextAlignment(TextAlignment.LEFT)
-        .setPadding(3);
+            .add(new Paragraph(sanitize(value)).setFontSize(BODY_SIZE))
+            .setBackgroundColor(background)
+            .setTextAlignment(TextAlignment.LEFT)
+            .setPadding(3);
   }
 
   private Color statusColor(ExecutionStatus status) {
@@ -216,6 +242,22 @@ public class PdfExecutionReportWriter implements ExecutionReportWriter {
       case ABORTED -> WARNING;
       case SKIPPED -> ColorConstants.DARK_GRAY;
     };
+  }
+
+  private String sanitizeLine(String value) {
+    if (value == null || value.isBlank()) {
+      return " ";
+    }
+    StringBuilder sanitized = new StringBuilder(value.length());
+    value.codePoints().forEach(codePoint -> {
+      if (codePoint <= 0xFF) {
+        sanitized.appendCodePoint(codePoint);
+      } else {
+        sanitized.append(' ');
+      }
+    });
+    String result = sanitized.toString();
+    return result.isBlank() ? " " : result;
   }
 
   private String sanitize(String value) {
