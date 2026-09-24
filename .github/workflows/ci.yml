@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Testes de API (Dog API)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configura JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Executa os testes
+        run: mvn -B test
+
+      - name: Publica relatórios (MD + PDF)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dog-api-reports
+          path: target/dog-api-reports/
+          if-no-files-found: warn
