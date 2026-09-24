@@ -16,7 +16,7 @@ import br.com.samuellima.qa.report.model.TestExecutionRecord;
 public class DogApiReportExtension implements BeforeTestExecutionCallback, TestWatcher {
 
   private static final Namespace NAMESPACE =
-      Namespace.create(DogApiReportExtension.class);
+          Namespace.create(DogApiReportExtension.class);
   private static final String PUBLISHER_KEY = "dogapi-report-publisher";
 
   private static final Map<String, Instant> START_TIMES = new ConcurrentHashMap<>();
@@ -24,7 +24,7 @@ public class DogApiReportExtension implements BeforeTestExecutionCallback, TestW
 
   static {
     Runtime.getRuntime().addShutdownHook(
-        new Thread(PUBLISHER::publishOnce, "dogapi-report-shutdown"));
+            new Thread(PUBLISHER::publishOnce, "dogapi-report-shutdown"));
   }
 
   @Override
@@ -55,35 +55,34 @@ public class DogApiReportExtension implements BeforeTestExecutionCallback, TestW
 
   private void registerPublisher(ExtensionContext context) {
     context.getRoot()
-        .getStore(NAMESPACE)
-        .getOrComputeIfAbsent(PUBLISHER_KEY,
-            key -> (CloseableResource) PUBLISHER::publishOnce,
-            CloseableResource.class);
+            .getStore(NAMESPACE)
+            .getOrComputeIfAbsent(PUBLISHER_KEY,
+                    key -> (CloseableResource) PUBLISHER::publishOnce,
+                    CloseableResource.class);
   }
 
   private void record(ExtensionContext context, ExecutionStatus status, Throwable cause) {
     Instant startedAt = START_TIMES.remove(context.getUniqueId());
     Duration duration = startedAt != null
-        ? Duration.between(startedAt, Instant.now())
-        : Duration.ZERO;
+            ? Duration.between(startedAt, Instant.now())
+            : Duration.ZERO;
 
     Class<?> testClass = context.getTestClass().orElse(null);
 
     ExecutionRegistry.add(new TestExecutionRecord(
-        resolveSuite(testClass),
-        testClass != null ? testClass.getSimpleName() : "?",
-        resolveParentClass(context),
-        context.getDisplayName(),
-        context.getTestMethod().map(java.lang.reflect.Method::getName).orElse("?"),
-        status,
-        startedAt,
-        duration,
-        firstLineOf(cause),
-        shortStackTrace(cause),
-        ExecutionRegistry.drainExtras()));
+            resolveSuite(testClass),
+            testClass != null ? testClass.getSimpleName() : "?",
+            resolveParentClass(context),
+            context.getDisplayName(),
+            context.getTestMethod().map(java.lang.reflect.Method::getName).orElse("?"),
+            status,
+            startedAt,
+            duration,
+            fullMessageOf(cause),
+            shortStackTrace(cause),
+            ExecutionRegistry.drainExtras()));
   }
 
-  /** Suíte = classe de teste top-level (agrupa @Nested sob a classe externa). */
   private String resolveSuite(Class<?> testClass) {
     if (testClass == null) {
       return "dog-api";
@@ -97,19 +96,19 @@ public class DogApiReportExtension implements BeforeTestExecutionCallback, TestW
 
   private String resolveParentClass(ExtensionContext context) {
     return context.getParent()
-        .flatMap(ExtensionContext::getTestClass)
-        .map(Class::getSimpleName)
-        .filter(name -> !name.equals(context.getTestClass().map(Class::getSimpleName).orElse("")))
-        .orElse(null);
+            .flatMap(ExtensionContext::getTestClass)
+            .map(Class::getSimpleName)
+            .filter(name -> !name.equals(context.getTestClass().map(Class::getSimpleName).orElse("")))
+            .orElse(null);
   }
 
-  private String firstLineOf(Throwable cause) {
+  private String fullMessageOf(Throwable cause) {
     if (cause == null) {
       return null;
     }
-    return cause.getMessage() != null
-        ? cause.getMessage().lines().findFirst().orElse(cause.getClass().getSimpleName())
-        : cause.getClass().getSimpleName();
+    return cause.getMessage() != null && !cause.getMessage().isBlank()
+            ? cause.getMessage()
+            : cause.getClass().getSimpleName();
   }
 
   private String shortStackTrace(Throwable cause) {
