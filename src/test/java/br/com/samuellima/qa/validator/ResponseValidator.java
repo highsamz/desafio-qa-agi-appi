@@ -61,4 +61,22 @@ public final class ResponseValidator {
     public static void assertMatchesSchema(Response response, String classpathSchema) {
         response.then().assertThat().body(matchesJsonSchemaInClasspath(classpathSchema));
     }
+
+    public static void assertNotJsonEnvelope(Response response) {
+        String contentType = response.getContentType();
+        boolean isJson = contentType != null && contentType.toLowerCase().contains("application/json");
+        assertFalse(isJson,
+                "Esperava resposta fora do envelope JSON nesta rota, veio Content-Type: " + contentType);
+
+        String status = response.jsonPath() != null ? safeStatus(response) : null;
+        assertTrue(status == null, "Esperava ausência do campo 'status' do envelope, veio: " + status);
+    }
+
+    private static String safeStatus(Response response) {
+        try {
+            return response.jsonPath().getString("status");
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }
