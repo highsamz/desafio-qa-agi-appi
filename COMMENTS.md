@@ -230,3 +230,18 @@ etc.) e classificados por `@Tag`.
   determinístico dos testes potencialmente instáveis. O core roda sozinho com
   `mvn test -DexcludedGroups=external,unstable`, mantendo o pipeline confiável sem
   abrir mão da cobertura extra quando desejada.
+
+---
+
+## 15. Observação de comportamento: case do nome da raça
+
+**Achado:** a documentação sugere que o nome da raça seria case-sensitive, mas na
+prática a Dog API **normaliza o case na entrada** — `Hound` resolve igual a `hound`
+(retorna 200 com imagens), não 404.
+
+**Decisão:** em vez de descartar o cenário, ele foi ajustado para **documentar o
+comportamento real** via teste explícito (case-insensitive). O caso negativo de raça
+inexistente continua coberto por um input de fato inválido (`notabreed` → 404).
+
+**Racional:** divergência entre documentação e comportamento observado é um achado de
+QA legítimo; registrá-la como teste é mais valioso do que ocultá-la removendo o caso.
