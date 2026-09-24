@@ -219,17 +219,24 @@ O pipeline é dividido em dois jobs:
 | `core` | `mvn -B test -DexcludedGroups=external,unstable` | ✅ Sim |
 | `full` | `mvn -B test` (suíte completa) | ❌ Não (`continue-on-error`) |
 
-O job **core** roda apenas os testes determinísticos: uma indisponibilidade da API
-pública ou uma variação de aleatoriedade não derruba o pipeline. O job **full** executa
-tudo em caráter informativo — falhas ali sinalizam instabilidade externa, não regressão
-de código.
+O job **core** roda apenas os testes determinísticos, isolando as fontes de
+instabilidade *internas* à suíte, variação de aleatoriedade (`unstable`) e dependência
+do CDN de imagens (`external`). O job **full** executa tudo em caráter informativo:
+falhas ali indicam instabilidade nesses pontos, não regressão de código.
+
+**Limite conhecido:** essa separação não torna o pipeline tolerante a uma
+indisponibilidade da Dog API. Todos os testes, inclusive os do `core`, consomem a API
+pública, se ela estiver fora, o `core` falha. O que o desenho entrega é falha *rápida*
+e diagnóstico claro (ver timeouts abaixo), não tolerância a outage. Tolerar isso exigiria
+retry com backoff ou um mock/contract test, fora do escopo deste desafio.
 
 Ambos publicam os relatórios (MD + PDF) como **artifact**, inclusive quando há falhas
 (`if: always()`), disponíveis na aba **Actions** → execução → *Artifacts*
 (`dog-api-reports-core` / `dog-api-reports-full`).
 
-As requisições têm **timeout** configurado (5s de conexão, 10s de resposta), evitando
-que o pipeline fique pendurado se a API não responder.
+As requisições têm **timeout** configurado (5s de conexão, 10s de resposta): se a API
+não responder, a execução falha rapidamente com erro explícito em vez de ficar pendurada
+até o limite do runner.
 
 ---
 

@@ -270,6 +270,19 @@ nessas rotas. Registrar isso é justamente o papel do QA.
 Trade-off:
 
 Sem timeout, uma API que não responde deixa o build pendurado até o limite do runner, feedback lento e custo desnecessário.
-Rodar tudo de forma bloqueante deixaria o pipeline refém de instabilidade externa (aleatoriedade, disponibilidade do CDN de imagens). Rodar só o core perderia cobertura.
+Rodar tudo de forma bloqueante deixaria o pipeline refém das fontes de instabilidade internas à suíte (aleatoriedade do endpoint random, disponibilidade do CDN de imagens). Rodar só o core perderia cobertura.
 A divisão resolve os dois lados: o job core (bloqueante) exclui external e unstable; o job full roda a suíte completa com continue-on-error, mantendo a informação sem transformar flakiness em build vermelho.
+Escopo do que isso resolve, e do que não resolve. A separação trata apenas a instabilidade dos grupos marcados. Ela não torna o pipeline tolerante a uma queda da Dog API: todo teste, inclusive os do core, consome a API pública, então um outage deixa o core vermelho. O timeout também não muda isso, ele faz a falha ser rápida e legível, não tolerada. Resiliência real a indisponibilidade exigiria retry com backoff, ou substituir a API por um mock/contract test, o que descaracterizaria a proposta de testar a integração real.
+
 Atualização do achado nº 15: o teste de case foi reescrito para asserir o comportamento real (200 + mesmo conjunto de imagens de hound) e está ativo, não mais @Disabled.
+
+18. Correção: truncamento de mensagens de erro no relatório
+    Problema identificado em revisão: a coleta guardava apenas a primeira linha da mensagem de falha. Para asserts simples isso bastava, mas falhas de JSON Schema trazem uma primeira linha genérica e o detalhe (qual campo, qual tipo esperado) nas linhas seguintes, ou seja, o relatório exibia exatamente a parte inútil e descartava o diagnóstico.
+
+Correção: a responsabilidade pelo truncamento passou da coleta para a apresentação:
+
+a extension armazena a mensagem completa (fullMessageOf);
+TestExecutionRecord ganhou errorHeadline() (primeira linha) e hasMultilineError();
+as tabelas (MD e PDF) usam a headline, que é o que cabe numa célula;
+a seção de falhas imprime a mensagem na íntegra — em bloco de código no Markdown e em parágrafos dedicados no PDF.
+Lição: truncar no ponto de coleta destrói informação irrecuperável. O corte deve ocorrer o mais tarde possível, onde se conhece a restrição de espaço.
