@@ -2,7 +2,7 @@
 
 Registro das escolhas de stack e arquitetura deste projeto, com os trade-offs
 considerados em cada ponto. O objetivo é deixar explícito *por que* cada decisão
-foi tomada, não apenas *o que* foi usado.
+foi tomada — não apenas *o que* foi usado.
 
 ---
 
@@ -15,10 +15,10 @@ foi tomada, não apenas *o que* foi usado.
 **Trade-offs:**
 
 - **Playwright em Java** cobre chamadas de API via `APIRequestContext`, mas:
-  - Não traz *runner* próprio em Java (diferente do TS), ainda dependeria de
+  - Não traz *runner* próprio em Java (diferente do TS) — ainda dependeria de
     JUnit/TestNG por baixo.
   - Seus diferenciais reais (auto-wait, browser, tracing) não se aplicam a teste
-    de API pura paga-se a complexidade sem usar o benefício.
+    de API pura — paga-se a complexidade sem usar o benefício.
   - Exigiria reconstruir à mão captura de response, parsing de body e validação
     de schema.
 - **Rest Assured** é o padrão de mercado para teste de API em Java:
@@ -69,7 +69,7 @@ parametrização (`@ParameterizedTest`) ser suficiente para os cenários da Dog 
   personalizável.
 - **Relatório próprio** exige mais código, mas:
   - Controle total sobre visual e conteúdo.
-  - Arquitetura de *writer* plugável (`ExecutionReportWriter`), fácil adicionar
+  - Arquitetura de *writer* plugável (`ExecutionReportWriter`) — fácil adicionar
     novos formatos.
   - Coleta confiável via *Extension API* do JUnit (`TestWatcher`), não parsing
     de log.
@@ -153,7 +153,7 @@ desserialização para DTO é feita via `response.as(...)` na camada de cenário
 
 **Trade-off:**
 
-- Retornar **DTO direto** esconderia status HTTP, content-type e o corpo de erro, que é
+- Retornar **DTO direto** esconderia status HTTP, content-type e o corpo de erro —
   justamente o que os validators de contrato/negativo precisam.
 - Retornar **`Response`** preserva a verdade de transporte e evita chamada HTTP
   duplicada (`.as()` opera sobre a resposta já obtida). O valor do flow passa a ser
@@ -178,7 +178,7 @@ ficam nos validators em código, não no schema.
 **Decisão:** validar formato (https + host `images.dog.ceo` + extensão) sempre, e
 acessibilidade real (HEAD 200) num grupo isolado por tag `@external`.
 
-**Trade-off:** o HEAD testa o CDN, não a API, adiciona dependência de rede e
+**Trade-off:** o HEAD testa o CDN, não a API — adiciona dependência de rede e
 possível flakiness. Isolar por tag mantém a suíte core determinística e permite rodar
 o grupo externo à parte. Cenários potencialmente instáveis (aleatoriedade, contagem
 por sub-raça) também recebem tags para não contaminar o core.
@@ -195,3 +195,53 @@ por sub-raça) também recebem tags para não contaminar o core.
 - **`@ExtendWith` na classe base** é mais explícito e fácil de justificar.
 - **Auto-detecção** mantém os cenários e a base limpos (nenhuma anotação de report),
   ao custo de um comportamento menos óbvio, documentado no README para compensar.
+
+---
+
+## 13. Report no mesmo módulo (vs. biblioteca extraída)
+
+**Decisão:** manter a camada de relatório dentro do próprio projeto, não como
+biblioteca separada.
+
+**Trade-off:**
+
+- **Extrair para lib** (multi-repo ou multi-módulo) daria reuso real entre projetos,
+  mas adiciona fricção ao avaliador: exigiria buildar/instalar a lib antes de rodar
+  os testes, quebrando o fluxo `git clone` + `mvn test` que o desafio pede.
+- **Manter no módulo** preserva a execução trivial e deixa o código do report visível
+  no repositório principal.
+
+**Nota de design:** a camada de report é agnóstica de domínio (não depende de Dog API
+nem do transporte) e está projetada para extração futura em biblioteca compartilhada,
+caso o reuso se justifique fora do contexto do desafio.
+
+---
+
+## 14. Organização dos cenários: @Nested + @Tag
+
+**Decisão:** cenários agrupados por `@Nested` (Contrato / Caminho feliz / Negativos /
+etc.) e classificados por `@Tag`.
+
+**Trade-off:**
+
+- `@Nested` dá leitura em árvore no output e no relatório (agrupado por classe
+  top-level), ao custo de mais aninhamento.
+- `@Tag` (`api`, por endpoint, `external`, `unstable`) permite isolar o núcleo
+  determinístico dos testes potencialmente instáveis. O core roda sozinho com
+  `mvn test -DexcludedGroups=external,unstable`, mantendo o pipeline confiável sem
+  abrir mão da cobertura extra quando desejada.
+
+---
+
+## 15. Observação de comportamento: case do nome da raça
+
+**Achado:** a documentação sugere que o nome da raça seria case-sensitive, mas na
+prática a Dog API **normaliza o case na entrada** — `Hound` resolve igual a `hound`
+(retorna 200 com imagens), não 404.
+
+**Decisão:** em vez de descartar o cenário, ele foi ajustado para **documentar o
+comportamento real** via teste explícito (case-insensitive). O caso negativo de raça
+inexistente continua coberto por um input de fato inválido (`notabreed` → 404).
+
+**Racional:** divergência entre documentação e comportamento observado é um achado de
+QA legítimo; registrá-la como teste é mais valioso do que ocultá-la removendo o caso.
