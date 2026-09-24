@@ -29,6 +29,13 @@ public class BreedFlow {
         return client.getSubBreedImages(breed, subBreed);
     }
 
+    public Response invalidBreedImagesRoute(String breed) {
+        return client.getBreedImagesTrailingSlash(breed);
+    }
+
+    public Response listAllBreedsWithExtraSegment(String extra) {
+        return client.getAllBreedsWithExtraSegment(extra);
+    }
 
     public Response imagesForFirstBreed() {
         return breedImages(firstBreed());
