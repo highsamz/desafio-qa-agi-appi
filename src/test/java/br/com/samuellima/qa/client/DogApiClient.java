@@ -13,6 +13,8 @@ public class DogApiClient {
     private static final String BREED_IMAGES = "/breed/{breed}/images";
     private static final String SUB_BREED_IMAGES = "/breed/{breed}/{subBreed}/images";
     private static final String RANDOM_IMAGE = "/breeds/image/random";
+    private static final String BREED_IMAGES_TRAILING = "/breed/{breed}/images/";
+    private static final String LIST_ALL_BREEDS_EXTRA = "/breeds/list/all/{extra}";
 
     private final RequestSpecification spec;
 
@@ -48,6 +50,25 @@ public class DogApiClient {
                 .pathParam("subBreed", subBreed)
                 .when()
                 .get(SUB_BREED_IMAGES)
+                .andReturn();
+    }
+
+
+    public Response getBreedImagesTrailingSlash(String breed) {
+        return given()
+                .spec(spec)
+                .pathParam("breed", breed)
+                .when()
+                .get(BREED_IMAGES_TRAILING)
+                .andReturn();
+    }
+
+    public Response getAllBreedsWithExtraSegment(String extra) {
+        return given()
+                .spec(spec)
+                .pathParam("extra", extra)
+                .when()
+                .get(LIST_ALL_BREEDS_EXTRA)
                 .andReturn();
     }
 
