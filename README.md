@@ -51,7 +51,7 @@ verificam:
 | Relatório | Implementação própria — Markdown + PDF (iText 7) |
 | CI | GitHub Actions |
 
-> O detalhamento das escolhas e trade-offs está em **[comments.md](./comments.md)**.
+> O detalhamento das escolhas e trade-offs está em **[COMMENTS.md](./COMMENTS.md)**.
 
 ---
 
@@ -87,7 +87,7 @@ API* do JUnit (`TestWatcher`), registrada por auto-detecção (sem `@ExtendWith`
 ```
 dog-api-test-automation/
 ├── pom.xml
-├── comments.md                     # decisões técnicas e trade-offs
+├── COMMENTS.md                     # decisões técnicas e trade-offs
 ├── .github/workflows/ci.yml        # pipeline
 └── src/test/
     ├── java/br/com/samuellima/qa/
@@ -170,13 +170,15 @@ mvn test -Ddogapi.baseUri=https://minha-base-alternativa
 - Contrato: 200, JSON, `status: success`, aderência ao JSON Schema
 - Conteúdo: lista íntegra e não vazia; raça conhecida com sub-raças esperadas; raça
   sem sub-raça retornando lista vazia
+- Negativos: rota inválida (segmento extra) → 404 fora do envelope JSON
 
 ### `GET /breed/{breed}/images`
 - Caminho feliz: raça válida retorna lista não vazia; aderência ao Schema; URLs contêm
   o nome da raça; raça sem sub-raça também retorna imagens; sub-raça
   (`/breed/{breed}/{subBreed}/images`); raça principal combinando várias sub-raças
 - Negativos: raça inexistente → 404 com `status: error` e `message` contendo
-  *"not found"*
+  *"not found"*; corpo de erro aderente ao Schema de erro; sub-raça inexistente com
+  mensagem distinta da raça principal; rota inválida (barra final) rompendo o envelope
 
 ### `GET /breeds/image/random`
 - Contrato: 200, JSON, `status: success`, aderência ao Schema
@@ -210,20 +212,31 @@ execução — sem parsing de log.
 O workflow em `.github/workflows/ci.yml` executa em **push**, **pull request** e
 **manualmente** (`workflow_dispatch`):
 
-1. Configura o JDK 21 (Temurin) com cache do Maven;
-2. Roda `mvn -B test`;
-3. Publica os relatórios (MD + PDF) como **artifact** — inclusive quando há falhas
-   (`if: always()`), para facilitar o diagnóstico.
+O pipeline é dividido em dois jobs:
 
-Os relatórios ficam disponíveis na aba **Actions** → execução → *Artifacts*
-(`dog-api-reports`).
+| Job | Escopo | Bloqueante |
+|---|---|---|
+| `core` | `mvn -B test -DexcludedGroups=external,unstable` | ✅ Sim |
+| `full` | `mvn -B test` (suíte completa) | ❌ Não (`continue-on-error`) |
+
+O job **core** roda apenas os testes determinísticos: uma indisponibilidade da API
+pública ou uma variação de aleatoriedade não derruba o pipeline. O job **full** executa
+tudo em caráter informativo — falhas ali sinalizam instabilidade externa, não regressão
+de código.
+
+Ambos publicam os relatórios (MD + PDF) como **artifact**, inclusive quando há falhas
+(`if: always()`), disponíveis na aba **Actions** → execução → *Artifacts*
+(`dog-api-reports-core` / `dog-api-reports-full`).
+
+As requisições têm **timeout** configurado (5s de conexão, 10s de resposta), evitando
+que o pipeline fique pendurado se a API não responder.
 
 ---
 
 ## 🧠 Decisões técnicas
 
 As escolhas de stack, arquitetura e os trade-offs considerados em cada ponto estão
-documentados em **[comments.md](./comments.md)** — incluindo Rest Assured × Playwright,
+documentados em **[COMMENTS.md](./COMMENTS.md)** — incluindo Rest Assured × Playwright,
 relatório próprio × Allure, modelagem dos DTOs, estratégia de tags e organização dos
 cenários.
 
@@ -231,12 +244,17 @@ cenários.
 
 ## 🔎 Achados de QA
 
-Durante a automação, observou-se uma **divergência entre a documentação e o
-comportamento real** da API: a doc sugere que o nome da raça seria case-sensitive, mas
-a Dog API normaliza o case na entrada (`Hound` resolve igual a `hound`, retornando 200).
+**1. Case do nome da raça.** A documentação sugere que o nome da raça seria
+case-sensitive, mas a Dog API **normaliza o case na entrada**: `Hound` retorna 200 com
+exatamente o mesmo conjunto de imagens de `hound`. Coberto por teste ativo que compara
+os dois conjuntos.
 
-O achado foi registrado como teste explícito (documentando o comportamento real) e está
-detalhado em [comments.md](./comments.md).
+**2. Contrato de erro não uniforme.** Em rotas não mapeadas (ex.: `/breed/hound/images/`
+com barra final, ou `/breeds/list/all/extra`), a API responde **fora do próprio
+envelope** — sem `Content-Type: application/json` e sem os campos `status`/`message`
+presentes nos demais erros. Coberto por testes que documentam o comportamento.
+
+Ambos estão detalhados em [COMMENTS.md](./COMMENTS.md).
 
 ---
 

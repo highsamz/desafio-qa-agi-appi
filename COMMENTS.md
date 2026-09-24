@@ -236,7 +236,7 @@ etc.) e classificados por `@Tag`.
 ## 15. Observação de comportamento: case do nome da raça
 
 **Achado:** a documentação sugere que o nome da raça seria case-sensitive, mas na
-prática a Dog API **normaliza o case na entrada** — `Hound` resolve igual a `hound`
+prática a Dog API **normaliza o case na entrada** `Hound` resolve igual a `hound`
 (retorna 200 com imagens), não 404.
 
 **Decisão:** em vez de descartar o cenário, ele foi ajustado para **documentar o
@@ -245,3 +245,31 @@ inexistente continua coberto por um input de fato inválido (`notabreed` → 404
 
 **Racional:** divergência entre documentação e comportamento observado é um achado de
 QA legítimo; registrá-la como teste é mais valioso do que ocultá-la removendo o caso.
+
+
+---
+
+## 16. Achado: contrato de erro não uniforme em rotas não mapeadas
+
+**Achado:** o envelope de erro (`status`/`message`/`code` em JSON) só é respeitado nas
+rotas mapeadas. Em rotas inválidas `/breed/{breed}/images/` (barra final) ou
+`/breeds/list/all/{extra}` a API responde 404 **fora do próprio contrato**: sem
+`Content-Type: application/json` e sem os campos do envelope.
+
+**Decisão:** cobrir por testes explícitos (`assertNotJsonEnvelope`) que documentam a
+divergência, em vez de assumir o envelope como universal.
+
+**Racional:** consistência de contrato de erro é um atributo de qualidade relevante para
+quem consome a API, um cliente que trate todo erro esperando `status`/`message` quebra
+nessas rotas. Registrar isso é justamente o papel do QA.
+
+---
+17. Resiliência: timeouts e separação do pipeline
+    Decisão: timeouts explícitos (5s de conexão, 10s de resposta) na RequestSpecBuilder e pipeline dividido em dois jobs.
+
+Trade-off:
+
+Sem timeout, uma API que não responde deixa o build pendurado até o limite do runner, feedback lento e custo desnecessário.
+Rodar tudo de forma bloqueante deixaria o pipeline refém de instabilidade externa (aleatoriedade, disponibilidade do CDN de imagens). Rodar só o core perderia cobertura.
+A divisão resolve os dois lados: o job core (bloqueante) exclui external e unstable; o job full roda a suíte completa com continue-on-error, mantendo a informação sem transformar flakiness em build vermelho.
+Atualização do achado nº 15: o teste de case foi reescrito para asserir o comportamento real (200 + mesmo conjunto de imagens de hound) e está ativo, não mais @Disabled.
